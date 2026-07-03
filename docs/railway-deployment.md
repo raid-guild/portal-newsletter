@@ -55,6 +55,36 @@ PGPASSWORD
 PGDATABASE
 ```
 
+Recommended Railway reference variables for a database service named
+`portal-newsletter-db`:
+
+```txt
+PGHOST=${{portal-newsletter-db.PGHOST}}
+PGPORT=${{portal-newsletter-db.PGPORT}}
+PGUSER=${{portal-newsletter-db.PGUSER}}
+PGPASSWORD=${{portal-newsletter-db.PGPASSWORD}}
+PGDATABASE=${{portal-newsletter-db.PGDATABASE}}
+```
+
+Current production service names:
+
+```txt
+listmonk app: portal-newsletter-listmonk
+listmonk database: Postgres-yasV
+public URL: https://portal-newsletter-listmonk-production.up.railway.app
+```
+
+Current production variable references:
+
+```txt
+PGHOST=${{Postgres-yasV.PGHOST}}
+PGPORT=${{Postgres-yasV.PGPORT}}
+PGUSER=${{Postgres-yasV.PGUSER}}
+PGPASSWORD=${{Postgres-yasV.PGPASSWORD}}
+PGDATABASE=${{Postgres-yasV.PGDATABASE}}
+LISTMONK_db__ssl_mode=require
+```
+
 or direct listmonk variables:
 
 ```txt
@@ -89,6 +119,25 @@ password: <SendGrid API key>
 
 The SendGrid API key should have mail-send permissions. The from address should
 be on an authenticated sending domain.
+
+## First Admin Login
+
+The first successful deployment did not bootstrap a super admin user. Open the
+public URL and create the first admin from the listmonk web UI:
+
+```txt
+https://portal-newsletter-listmonk-production.up.railway.app/admin
+```
+
+After logging in, update listmonk's public/root URL setting from the default
+`http://localhost:9000` to:
+
+```txt
+https://portal-newsletter-listmonk-production.up.railway.app
+```
+
+This keeps subscription links, archive links, and email links from pointing at
+localhost.
 
 ## Uploads
 
