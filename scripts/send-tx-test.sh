@@ -54,7 +54,15 @@ template_response="$(
     --data "${template_payload}"
 )"
 
-template_id="$(jq -r '.data[0].id // .data.id // empty' <<<"$template_response")"
+template_id="$(
+  jq -r '
+    if (.data | type) == "array" then
+      .data[0].id // empty
+    else
+      .data.id // empty
+    end
+  ' <<<"$template_response"
+)"
 
 if [[ -z "$template_id" || "$template_id" == "null" ]]; then
   echo "Unable to read template ID from listmonk response:" >&2
