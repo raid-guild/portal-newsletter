@@ -139,6 +139,28 @@ https://portal-newsletter-listmonk-production.up.railway.app
 This keeps subscription links, archive links, and email links from pointing at
 localhost.
 
+## API Smoke Test
+
+After SMTP works from the listmonk UI, create an API user/token in listmonk and
+run a transactional smoke test from this repo:
+
+```bash
+LISTMONK_API_USER='<api user>' \
+LISTMONK_API_TOKEN='<api token>' \
+TEST_EMAIL='dekanbrown@odyssy.io' \
+./scripts/send-tx-test.sh
+```
+
+The script:
+
+1. creates a temporary transactional template
+2. sends one external-mode transactional email through `/api/tx`
+3. deletes the temporary template by default
+
+Set `DELETE_TEMPLATE=false` to keep the temporary template for inspection.
+
+This does not create a subscriber or add the recipient to any list.
+
 ## Uploads
 
 Railway service filesystems are ephemeral. If newsletter media uploads are used
