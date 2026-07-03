@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+
+.railway/
+
+node_modules/
+dist/
+tmp/
+uploads/
