@@ -161,6 +161,67 @@ Set `DELETE_TEMPLATE=false` to keep the temporary template for inspection.
 
 This does not create a subscriber or add the recipient to any list.
 
+## Portal Post To Campaign
+
+Use `scripts/portal-post-to-listmonk-campaign.mjs` to convert a Portal post into
+email-safe HTML and optionally create a draft listmonk campaign.
+
+First create a reusable listmonk campaign template from:
+
+```txt
+templates/raidguild-updates.html
+```
+
+You can paste the HTML into the listmonk UI, or create it through the API:
+
+```bash
+LISTMONK_API_USER='<api user>' \
+LISTMONK_API_TOKEN='<api token>' \
+./scripts/create-listmonk-template.sh
+```
+
+The template must include:
+
+```txt
+{{ template "content" . }}
+```
+
+That is where listmonk inserts the campaign body generated from the Portal post.
+
+Generate preview files only:
+
+```bash
+PORTAL_JWT='<payload jwt>' \
+node scripts/portal-post-to-listmonk-campaign.mjs --post-id 68
+```
+
+Create a draft campaign:
+
+```bash
+PORTAL_JWT='<payload jwt>' \
+LISTMONK_API_USER='<api user>' \
+LISTMONK_API_TOKEN='<api token>' \
+LISTMONK_TEMPLATE_ID='<template id>' \
+LISTMONK_LIST_IDS='<list id>' \
+node scripts/portal-post-to-listmonk-campaign.mjs \
+  --post-id 68 \
+  --create-campaign
+```
+
+Create a draft and send a test:
+
+```bash
+PORTAL_JWT='<payload jwt>' \
+LISTMONK_API_USER='<api user>' \
+LISTMONK_API_TOKEN='<api token>' \
+LISTMONK_TEMPLATE_ID='<template id>' \
+LISTMONK_LIST_IDS='<list id>' \
+node scripts/portal-post-to-listmonk-campaign.mjs \
+  --post-id 68 \
+  --create-campaign \
+  --test-email dekanbrown@odyssy.io
+```
+
 ## Uploads
 
 Railway service filesystems are ephemeral. If newsletter media uploads are used
