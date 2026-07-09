@@ -20,20 +20,27 @@ const listmonkURL = stripTrailingSlash(
   args.listmonkUrl || env('LISTMONK_URL') || DEFAULT_LISTMONK_URL,
 )
 const postID = args.postId || env('PORTAL_POST_ID')
+const postJSONPath = args.postJson || env('PORTAL_POST_JSON')
+const mediaJSONPath = args.mediaJson || env('PORTAL_MEDIA_JSON')
 const outputDir = args.outputDir || env('OUTPUT_DIR') || DEFAULT_OUTPUT_DIR
 const createCampaign = Boolean(args.createCampaign)
 const testEmail = args.testEmail || env('TEST_EMAIL')
 
-if (!postID) fail('Missing post ID. Pass --post-id 68 or set PORTAL_POST_ID=68.')
+if (!postID && !postJSONPath) {
+  fail('Missing post input. Pass --post-id 68, set PORTAL_POST_ID=68, or pass --post-json path.')
+}
 
 const portalToken = await getPortalToken({ portalURL })
-const post = await fetchPortalPost({ portalToken, portalURL, postID })
+const post = postJSONPath
+  ? await readPostJSON(postJSONPath)
+  : await fetchPortalPost({ portalToken, portalURL, postID })
+const mediaByID = mediaJSONPath ? await readMediaJSON(mediaJSONPath) : new Map()
 const title = stringValue(post.title) || `Portal post ${postID}`
 const subject = args.subject || env('CAMPAIGN_SUBJECT') || title
 const campaignName = args.name || env('CAMPAIGN_NAME') || `Portal post ${postID}: ${title}`
 const slug = stringValue(post.slug) || `post-${postID}`
 const postURL = `${portalURL}/posts/${slug}`
-const rendered = renderEmailBody({ post, portalURL, postURL, subject })
+const rendered = renderEmailBody({ mediaByID, post, portalURL, postURL, subject })
 const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
 const baseName = `${slug}-${timestamp}`
 
@@ -138,6 +145,42 @@ async function fetchPortalPost({ portalToken, portalURL, postID }) {
   return response.json()
 }
 
+async function readPostJSON(filePath) {
+  try {
+    const { readFile } = await import('node:fs/promises')
+    return JSON.parse(await readFile(filePath, 'utf8'))
+  } catch (error) {
+    fail(
+      `Failed to read post JSON ${filePath}: ${
+        error instanceof Error ? error.message : 'unknown error'
+      }`,
+    )
+  }
+}
+
+async function readMediaJSON(filePath) {
+  try {
+    const { readFile } = await import('node:fs/promises')
+    const parsed = JSON.parse(await readFile(filePath, 'utf8'))
+    const records = Array.isArray(parsed) ? parsed : parsed.docs || parsed.data || []
+    const mediaByID = new Map()
+
+    for (const record of records) {
+      if (record?.id !== undefined && record?.id !== null) {
+        mediaByID.set(String(record.id), record)
+      }
+    }
+
+    return mediaByID
+  } catch (error) {
+    fail(
+      `Failed to read media JSON ${filePath}: ${
+        error instanceof Error ? error.message : 'unknown error'
+      }`,
+    )
+  }
+}
+
 async function createListmonkCampaign({
   body,
   campaignName,
@@ -206,7 +249,8 @@ async function listmonkFetch({ body, listmonkURL, method, path }) {
   return contentType.includes('application/json') ? response.json() : response.text()
 }
 
-function renderEmailBody({ post, portalURL, postURL, subject }) {
+function renderEmailBody({ mediaByID, post, portalURL, postURL, subject }) {
+  const context = { mediaByID, portalURL }
   const chunks = []
   chunks.push(
     `<p style="margin:0 0 12px;color:#d7a846;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">RaidGuild Update</p>`,
@@ -214,9 +258,9 @@ function renderEmailBody({ post, portalURL, postURL, subject }) {
   chunks.push(
     `<h1 style="margin:0 0 20px;color:#fff6df;font-size:32px;line-height:1.15;">${escapeHTML(subject)}</h1>`,
   )
-  chunks.push(renderNodes(post.content?.root?.children || [], { portalURL }))
+  chunks.push(renderNodes(post.content?.root?.children || [], context))
   chunks.push(
-    `<p style="margin:32px 0 0;"><a href="${escapeAttribute(postURL)}" style="display:inline-block;background:#d7a846;color:#16110d;padding:13px 18px;text-decoration:none;font-size:13px;font-weight:700;">Open in Portal</a></p>`,
+    `<p style="margin:32px 0 0;"><a href="${escapeAttribute(listmonkTrackedURL(postURL))}" style="display:inline-block;background:#d7a846;color:#16110d;padding:13px 18px;text-decoration:none;font-size:13px;font-weight:700;">Open in Portal</a></p>`,
   )
 
   const html = chunks.filter(Boolean).join('\n')
@@ -275,7 +319,7 @@ function renderNode(node, context) {
       const url = safeURL(node.fields?.url, context.portalURL)
       const children = renderNodes(node.children, context).trim() || escapeHTML(url)
       if (!url) return children
-      return `<a href="${escapeAttribute(url)}" style="color:#d7a846;text-decoration:underline;">${children}</a>`
+      return `<a href="${escapeAttribute(listmonkTrackedURL(url))}" style="color:#d7a846;text-decoration:underline;">${children}</a>`
     }
     case 'upload': {
       return renderMedia(node.value, context)
@@ -305,7 +349,12 @@ function renderFormattedText(node) {
   return html
 }
 
-function renderMedia(media, { portalURL }) {
+function renderMedia(media, context) {
+  const portalURL = context.portalURL
+  if (typeof media === 'number' || typeof media === 'string') {
+    media = context.mediaByID?.get(String(media))
+  }
+
   if (!media || typeof media !== 'object') return ''
 
   const url = absoluteURL(media.url || media.sizes?.large?.url || media.sizes?.medium?.url, portalURL)
@@ -313,7 +362,7 @@ function renderMedia(media, { portalURL }) {
 
   const alt = escapeAttribute(media.alt || '')
   const caption = media.caption?.root?.children?.length
-    ? `<div style="margin:8px 0 22px;color:#b8ad9b;font-size:13px;line-height:1.5;">${renderNodes(media.caption.root.children, { portalURL })}</div>`
+    ? `<div style="margin:8px 0 22px;color:#b8ad9b;font-size:13px;line-height:1.5;">${renderNodes(media.caption.root.children, context)}</div>`
     : ''
 
   return `
@@ -382,6 +431,19 @@ function absoluteURL(value, baseURL) {
     return new URL(value, baseURL).toString()
   } catch {
     return ''
+  }
+}
+
+function listmonkTrackedURL(value) {
+  try {
+    const url = new URL(value)
+
+    if (!['http:', 'https:'].includes(url.protocol)) return value
+    if (value.endsWith('@TrackLink')) return value
+
+    return `${value}@TrackLink`
+  } catch {
+    return value
   }
 }
 
@@ -474,6 +536,8 @@ Create a draft listmonk campaign:
 
 Options:
   --post-id <id>            Portal post ID.
+  --post-json <path>        Read a Portal post JSON file instead of the API.
+  --media-json <path>       Read related Portal media JSON for DB-exported posts.
   --subject <subject>       Campaign subject. Defaults to post title.
   --name <name>             Internal listmonk campaign name.
   --template-id <id>        listmonk campaign template ID.
